@@ -1,0 +1,68 @@
+{
+    "displayName": "Hugging Face IMDB Dataset",
+    "name": "hf-imdb-dataset",
+    "description": "IMDB dataset from Hugging Face with 25k text labeled with pos or neg",
+    "scope": "public",
+    "version": "0.0.3",
+    "codebase": {
+        "type": "git",
+        "gitUrl": "https://github.com/dataloop-ai-apps/datasets-huggingface.git",
+        "gitTag": "0.0.3"
+    },
+    "attributes": {
+        "Provider": "Hugging Face",
+        "Category": "Dataset",
+        "License": "CC BY 4.0"
+    },
+    "components": {
+        "modules": [
+            {
+                "name": "dataset-adapter",
+                "entryPoint": "dataset_loader.py",
+                "className": "DatasetHF",
+                "description": "Dataset adapter for Hugging Face",
+                "initInputs": [],
+                "functions": [
+                    {
+                        "name": "upload_dataset",
+                        "input": [
+                            {
+                                "type": "Dataset",
+                                "name": "dataset",
+                                "description": "Dataloop Dataset Entity"
+                            },
+                            {
+                                "type": "String",
+                                "name": "source",
+                                "description": "Dataset source URL"
+                            }
+                        ],
+                        "output": [],
+                        "displayName": "upload_dataset_text",
+                        "displayIcon": "",
+                        "description": "function to upload dataset to Dataloop"
+                    }
+                ]
+            }
+        ],
+        "datasets": [
+            {
+                "name": "huggingface-imdb",
+                "docs": "http://ai.stanford.edu/~amaas/data/sentiment/",
+                "source": "https://huggingface.co/datasets/stanfordnlp/imdb",
+                "invoke": {
+                    "namespace": "dataset-adapter.upload_dataset_text"
+                },
+                "metadata": {
+                    "importConfig": {
+                        "type": "text_classification",
+                        "id_to_label_map": {
+                            "0": "neg",
+                            "1": "pos"
+                        }
+                    }
+                }
+            }
+        ]
+    }
+}

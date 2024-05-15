@@ -1,12 +1,13 @@
-import logging
+from dtlpyconverters.uploaders import ConvertersUploader
+from concurrent.futures import ThreadPoolExecutor
 from datasets import load_dataset
 import dtlpy as dl
-import tempfile
-import os
-import json
 import threading
-
-from dtlpyconverters.uploaders import ConvertersUploader
+import tempfile
+import logging
+import json
+import os
+import io
 
 logger = logging.getLogger(name='dataset-huggingFace')
 
@@ -31,7 +32,6 @@ class DatasetHF(dl.BaseServiceRunner):
             "categories": [{"id": 1, "name": "Chair"}, {"id": 2, "name": "Sofa"}, {"id": 3, "name": "Table"}]
         }
 
-        self.datasets_hug = load_dataset("Francesco/furniture-ngpea", split="train")
         self.logger.info('Hugging Face dataset loaded')
 
     @staticmethod
@@ -65,7 +65,43 @@ class DatasetHF(dl.BaseServiceRunner):
         for thread in threads:
             thread.join()
 
-    def upload_dataset(self, dataset: dl.Dataset, source: str):
+    def _upload_single_text(self, dataset: dl.Dataset, text: str, filename: str, annotations: dl.AnnotationCollection):
+        try:
+            byte_io = io.BytesIO()
+            byte_io.name = filename
+            byte_io.write(text.encode())
+            byte_io.seek(0)
+            item = dataset.items.upload(local_path=byte_io)
+            item.annotations.upload(annotations=annotations)
+        except Exception:
+            self.logger.exception('failed while uploading')
+
+    def upload_dataset_text(self, dataset: dl.Dataset, source: str):
+        # dataset = dl.datasets.get(None, '664445f66d405a38aebfe619')
+        config = dataset.metadata['system'].get('importConfig', dict())
+        id_to_label_map = config.get('id_to_label_map')
+        hf_location = source.replace('https://huggingface.co/datasets/', '')
+        datasets_hug = load_dataset(hf_location, split="train")
+
+        pool = ThreadPoolExecutor(max_workers=32)
+        for i_item, item in enumerate(datasets_hug):
+            text = item['text']
+            label = item['label']
+            filename = f'{i_item:05}.txt'
+            annotations = dl.AnnotationCollection()
+            annotations.add(annotation_definition=dl.Classification(label=id_to_label_map[str(label)]))
+            pool.submit(self._upload_single_text,
+                        text=text,
+                        filename=filename,
+                        dataset=dataset,
+                        annotations=annotations)
+
+            assert False
+
+        pool.shutdown()
+        self.logger.info('Dataset uploaded successfully')
+
+    def upload_dataset_coco(self, dataset: dl.Dataset, source: str):
         """
         Prepares and uploads the dataset to the Dataloop platform.
 
@@ -76,7 +112,9 @@ class DatasetHF(dl.BaseServiceRunner):
         temp_dir_ann = tempfile.TemporaryDirectory()
         images_and_paths = []
         self.logger.info('Uploading dataset...')
-        for item in self.datasets_hug:
+        hf_location = source.replace('https://huggingface.co/datasets/', '')
+        datasets_hug = load_dataset(hf_location, split="train")
+        for item in datasets_hug:
             image_path = os.path.join(temp_dir.name, f"image_{item['image_id']}.jpg")
             images_and_paths.append((item["image"], image_path))
 
@@ -98,7 +136,8 @@ class DatasetHF(dl.BaseServiceRunner):
                     "bbox": bbox,
                     "area": area
                 }
-                for obj_id, area, bbox, category in zip(objects["id"], objects["area"], objects["bbox"], objects["category"])
+                for obj_id, area, bbox, category in
+                zip(objects["id"], objects["area"], objects["bbox"], objects["category"])
             ])
 
         max_threads = 10
@@ -111,8 +150,8 @@ class DatasetHF(dl.BaseServiceRunner):
 
         loop = self.converter._get_event_loop()
         loop.run_until_complete(self.converter.coco_to_dataloop(dataset=dataset,
-                                input_items_path=temp_dir.name,
-                                input_annotations_path=temp_dir_ann.name,
-                                coco_json_filename='coco_format.json',
-                                annotation_options=[dl.AnnotationType.BOX]))
+                                                                input_items_path=temp_dir.name,
+                                                                input_annotations_path=temp_dir_ann.name,
+                                                                coco_json_filename='coco_format.json',
+                                                                annotation_options=[dl.AnnotationType.BOX]))
         self.logger.info('Dataset uploaded successfully')
