@@ -24,7 +24,7 @@
                 "initInputs": [],
                 "functions": [
                     {
-                        "name": "upload_dataset",
+                        "name": "upload_dataset_text",
                         "input": [
                             {
                                 "type": "Dataset",
