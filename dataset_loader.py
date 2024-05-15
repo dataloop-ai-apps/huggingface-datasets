@@ -96,8 +96,6 @@ class DatasetHF(dl.BaseServiceRunner):
                         dataset=dataset,
                         annotations=annotations)
 
-            assert False
-
         pool.shutdown()
         self.logger.info('Dataset uploaded successfully')
 
