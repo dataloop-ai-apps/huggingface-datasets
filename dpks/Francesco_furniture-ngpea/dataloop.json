@@ -3,11 +3,11 @@
   "name": "hf-furniture-dataset",
   "description": "Furniture dataset from Hugging Face with 454 items and 3 categories (Chair, Sofa, Table).",
   "scope": "public",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "codebase": {
     "type": "git",
     "gitUrl": "https://github.com/dataloop-ai-apps/datasets-huggingface.git",
-    "gitTag": "0.0.8"
+    "gitTag": "0.0.9"
   },
   "attributes": {
     "Provider": "Hugging Face",
