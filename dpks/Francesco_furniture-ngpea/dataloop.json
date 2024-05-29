@@ -42,7 +42,7 @@
         "initInputs": [],
         "functions": [
           {
-            "name": "upload_dataset",
+            "name": "upload_dataset_coco",
             "input": [
               {
                 "type": "Dataset",
@@ -69,7 +69,7 @@
         "docs": "https://universe.roboflow.com/roboflow-100/furniture-ngpea",
         "source": "https://huggingface.co/datasets/Francesco/furniture-ngpea",
         "invoke": {
-          "namespace": "dataset-adapter.upload_dataset"
+          "namespace": "dataset-adapter.upload_dataset_coco"
         },
         "importConfig": {
           "type": "object_detection",
