@@ -8,6 +8,8 @@ import logging
 import json
 import os
 import io
+import requests
+import zipfile
 
 logger = logging.getLogger(name='dataset-huggingFace')
 
@@ -77,7 +79,24 @@ class DatasetHF(dl.BaseServiceRunner):
             self.logger.exception('failed while uploading')
 
     def upload_dataset_text(self, dataset: dl.Dataset, source: str):
-        # dataset = dl.datasets.get(None, '664445f66d405a38aebfe619')
+
+        self.logger.info('Downloading zip file...')
+        url = "https://storage.googleapis.com/model-mgmt-snapshots/datasets_imdb/vectors.zip"
+        direc = os.getcwd()
+        zip_dir = os.path.join(direc, 'vectors.zip')
+
+        response = requests.get(url)
+        if response.status_code == 200:
+            with open(zip_dir, 'wb') as f:
+                f.write(response.content)
+        else:
+            self.logger.error(f'Failed to download the file. Status code: {response.status_code}')
+            return
+
+        with zipfile.ZipFile(zip_dir, 'r') as zip_ref:
+            zip_ref.extractall(direc)
+        self.logger.info('Zip file downloaded and extracted.')
+
         config = dataset.metadata['system'].get('importConfig', dict())
         id_to_label_map = config.get('id_to_label_map')
         hf_location = source.replace('https://huggingface.co/datasets/', '')
@@ -97,6 +116,22 @@ class DatasetHF(dl.BaseServiceRunner):
                         annotations=annotations)
 
         pool.shutdown()
+
+        feature_set = self.ensure_feature_set(dataset)
+
+        filters = dl.Filters()
+        filters.add(field='filename', values=["/07235.txt", "/14141.txt", "/14142.txt", "/04003.txt", "/16696.txt"], operator=dl.FiltersOperations.IN)
+        dataset.items.delete(filters=filters)
+
+        # Upload features
+        vectors_file = os.path.join(direc, 'vectors/vectors.json')
+        with open(vectors_file, 'r') as f:
+            vectors = json.load(f)
+
+        with ThreadPoolExecutor(max_workers=32) as executor:
+            for key, value in vectors.items():
+                executor.submit(self.create_feature, key, value, dataset, feature_set)
+
         self.logger.info('Dataset uploaded successfully')
 
     def upload_dataset_coco(self, dataset: dl.Dataset, source: str):
@@ -153,3 +188,37 @@ class DatasetHF(dl.BaseServiceRunner):
                                                                 coco_json_filename='coco_format.json',
                                                                 annotation_options=[dl.AnnotationType.BOX]))
         self.logger.info('Dataset uploaded successfully')
+
+    @staticmethod
+    def ensure_feature_set(dataset):
+        """
+        Ensures that the feature set exists or creates a new one if not found.
+
+        :param dataset: The dataset where the feature set is to be managed.
+        """
+        try:
+            feature_set = dataset.project.feature_sets.get(feature_set_name='clip-feature-set')
+            logger.info(f'Feature Set found! Name: {feature_set.name}, ID: {feature_set.id}')
+        except dl.exceptions.NotFound:
+            logger.info('Feature Set not found, creating...')
+            feature_set = dataset.project.feature_sets.create(
+                name='clip-feature-set',
+                entity_type=dl.FeatureEntityType.ITEM,
+                project_id=dataset.project.id,
+                set_type='clip',
+                size=512
+            )
+        return feature_set
+
+    @staticmethod
+    def create_feature(key, value, dataset, feature_set):
+        """
+        Creates a feature for a given item.
+
+        :param key: The key identifying the item.
+        :param value: The feature value to be added.
+        :param dataset: The dataset containing the item.
+        :param feature_set: The feature set to which the feature will be added.
+        """
+        item = dataset.items.get(filepath=key)
+        feature_set.features.create(entity=item, value=value)
