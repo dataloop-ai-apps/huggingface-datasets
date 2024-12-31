@@ -112,9 +112,8 @@ class DatasetHF(dl.BaseServiceRunner):
             zip_ref.extractall(direc)
         self.logger.info('Zip file downloaded and extracted.')
 
-        # id_to_label_map = config.get('id_to_label_map')
-
-        id_to_label_map = {"0": "neg", "1": "pos"}
+        config = dataset.metadata['system'].get('importConfig', dict())
+        id_to_label_map = config.get('id_to_label_map')
 
         hf_location = source.replace('https://huggingface.co/datasets/', '')
         datasets_hug = load_dataset(hf_location, split="train")
@@ -134,7 +133,7 @@ class DatasetHF(dl.BaseServiceRunner):
                 new_progress > progress_tracker['last_progress']
                 and new_progress % 5 == 0
             ):
-                print(f'Progress: {new_progress}%')
+                logger.info(f'Progress: {new_progress}%')
                 progress_tracker['last_progress'] = new_progress
                 if progress_class is not None:
                     progress_class.update(
@@ -211,8 +210,23 @@ class DatasetHF(dl.BaseServiceRunner):
 
     @staticmethod
     def upload_progress(progress, futures, massage, min_progress, max_progress):
+        """
+        Tracks and logs the progress of a set of asynchronous tasks.
+
+        Args:
+            progress (object): An object that has an `update` method to report progress.
+            futures (list): A list of futures representing the asynchronous tasks.
+            massage (str): A message to be logged and passed to the progress object.
+            min_progress (int): The minimum progress value (usually 0).
+            max_progress (int): The maximum progress value (usually 100).
+
+        Logs:
+            Logs the progress percentage at each step.
+
+        Updates:
+            Calls the `update` method of the `progress` object with the new progress value and message.
+        """
         total_tasks = len(futures)
-        print(f'Total tasks: {total_tasks}')
         tasks_completed = 0
         task_progress = 0
         for _ in as_completed(futures):
@@ -222,7 +236,7 @@ class DatasetHF(dl.BaseServiceRunner):
                 + min_progress
             )
             if new_progress > task_progress and new_progress % 1 == 0:
-                print(f'Progress: {new_progress}%')
+                logger.info(f'Progress: {new_progress}%')
                 task_progress = new_progress
                 if progress is not None:
                     progress.update(
