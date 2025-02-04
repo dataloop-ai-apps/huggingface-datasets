@@ -113,7 +113,7 @@ class DatasetHF(dl.BaseServiceRunner):
         self.logger.info('Zip file downloaded and extracted.')
 
         config = dataset.metadata['system'].get('importConfig', dict())
-        id_to_label_map = config.get('id_to_label_map')
+        id_to_label_map = config.get('id_to_label_map', {"0": "neg", "1": "pos"})
 
         hf_location = source.replace('https://huggingface.co/datasets/', '')
         datasets_hug = load_dataset(hf_location, split="train")
@@ -148,6 +148,11 @@ class DatasetHF(dl.BaseServiceRunner):
             func=progress_callback, event=dl.CallbackEvent.ITEMS_UPLOAD
         )
 
+        # Upload features
+        vectors_file = os.path.join(direc, 'vectors/vectors.json')
+        with open(vectors_file, 'r') as f:
+            vectors = json.load(f)
+
         items_to_skip = {
             7235,
             14141,
@@ -155,16 +160,26 @@ class DatasetHF(dl.BaseServiceRunner):
             4003,
             16696,
         }  # this items doesn't have features
-
+        used_vectors = {}
+        counter_positive = 0
+        counter_negative = 0
         for i_item, item in enumerate(datasets_hug):
             if i_item in items_to_skip:
                 continue
             text = item['text']
             file_name = f'{i_item:05}.txt'
+            label = item['label']
+            if label == 1:
+                counter_positive += 1
+                if counter_positive > 250:
+                    continue
+            else:
+                counter_negative += 1
+                if counter_negative > 250:
+                    continue
+
             with open(os.path.join(temp_dir.name, file_name), "w") as file:
                 file.write(text)
-
-            label = item['label']
 
             annotations = dl.AnnotationCollection()
 
@@ -178,6 +193,11 @@ class DatasetHF(dl.BaseServiceRunner):
 
             with open(os.path.join(temp_dir_ann.name, f'{i_item:05}.json'), 'w') as f:
                 json.dump(ann_json, f)
+            key = f'/{i_item:05}.txt'
+            used_vectors[key] = vectors[key]
+
+            if counter_positive >= 250 and counter_negative >= 250:
+                break
 
         dataset.items.upload(
             local_path=temp_dir.name + "/",
@@ -191,15 +211,10 @@ class DatasetHF(dl.BaseServiceRunner):
 
         feature_set = self.ensure_feature_set(dataset)
 
-        # Upload features
-        vectors_file = os.path.join(direc, 'vectors/vectors.json')
-        with open(vectors_file, 'r') as f:
-            vectors = json.load(f)
-
         with ThreadPoolExecutor(max_workers=32) as executor:
             vector_features = [
                 executor.submit(self.create_feature, key, value, dataset, feature_set)
-                for key, value in vectors.items()
+                for key, value in used_vectors.items()
             ]
 
             self.upload_progress(
