@@ -91,12 +91,11 @@ class DatasetHF(dl.BaseServiceRunner):
             )
 
         self.logger.info('Downloading zip file...')
-        url = "https://storage.googleapis.com/model-mgmt-snapshots/datasets_imdb/vectors.zip"
+        url = (
+            "https://storage.googleapis.com/model-mgmt-snapshots/datasets_imdb/imdb.zip"
+        )
         direc = os.getcwd()
-        zip_dir = os.path.join(direc, 'vectors.zip')
-
-        temp_dir = tempfile.TemporaryDirectory()
-        temp_dir_ann = tempfile.TemporaryDirectory()
+        zip_dir = os.path.join(direc, 'imdb.zip')
 
         response = requests.get(url, timeout=100)
         if response.status_code == 200:
@@ -113,10 +112,7 @@ class DatasetHF(dl.BaseServiceRunner):
         self.logger.info('Zip file downloaded and extracted.')
 
         config = dataset.metadata['system'].get('importConfig', dict())
-        id_to_label_map = config.get('id_to_label_map')
-
-        hf_location = source.replace('https://huggingface.co/datasets/', '')
-        datasets_hug = load_dataset(hf_location, split="train")
+        id_to_label_map = config.get('id_to_label_map', {"0": "neg", "1": "pos"})
 
         if progress is not None:
             progress.update(
@@ -148,40 +144,16 @@ class DatasetHF(dl.BaseServiceRunner):
             func=progress_callback, event=dl.CallbackEvent.ITEMS_UPLOAD
         )
 
-        items_to_skip = {
-            7235,
-            14141,
-            14142,
-            4003,
-            16696,
-        }  # this items doesn't have features
+        # Upload features
+        vectors_file = os.path.join(direc, 'vectors/vectors.json')
+        with open(vectors_file, 'r') as f:
+            vectors = json.load(f)
 
-        for i_item, item in enumerate(datasets_hug):
-            if i_item in items_to_skip:
-                continue
-            text = item['text']
-            file_name = f'{i_item:05}.txt'
-            with open(os.path.join(temp_dir.name, file_name), "w") as file:
-                file.write(text)
-
-            label = item['label']
-
-            annotations = dl.AnnotationCollection()
-
-            annotations.add(
-                annotation_definition=dl.Classification(
-                    label=id_to_label_map[str(label)]
-                )
-            )
-
-            ann_json = annotations.to_json()
-
-            with open(os.path.join(temp_dir_ann.name, f'{i_item:05}.json'), 'w') as f:
-                json.dump(ann_json, f)
-
+        annotations_files = os.path.join(direc, 'annotations/')
+        items_files = os.path.join(direc, 'items/')
         dataset.items.upload(
-            local_path=temp_dir.name + "/",
-            local_annotations_path=temp_dir_ann.name + "/",
+            local_path=items_files,
+            local_annotations_path=annotations_files,
         )
 
         # Setup dataset recipe and ontology
@@ -190,11 +162,6 @@ class DatasetHF(dl.BaseServiceRunner):
         ontology.add_labels(label_list=['pos', 'neg'])
 
         feature_set = self.ensure_feature_set(dataset)
-
-        # Upload features
-        vectors_file = os.path.join(direc, 'vectors/vectors.json')
-        with open(vectors_file, 'r') as f:
-            vectors = json.load(f)
 
         with ThreadPoolExecutor(max_workers=32) as executor:
             vector_features = [

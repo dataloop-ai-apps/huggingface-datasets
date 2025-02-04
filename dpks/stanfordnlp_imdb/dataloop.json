@@ -1,7 +1,7 @@
 {
   "displayName": "Hugging Face IMDB Dataset",
   "name": "hf-imdb-dataset",
-  "description": "IMDB dataset from Hugging Face with 25k text labeled with pos or neg",
+  "description": "IMDB dataset from Hugging Face with 500 text labeled with pos or neg",
   "scope": "public",
   "version": "0.0.11",
   "codebase": {
