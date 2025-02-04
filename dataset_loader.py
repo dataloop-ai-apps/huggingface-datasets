@@ -91,12 +91,11 @@ class DatasetHF(dl.BaseServiceRunner):
             )
 
         self.logger.info('Downloading zip file...')
-        url = "https://storage.googleapis.com/model-mgmt-snapshots/datasets_imdb/vectors.zip"
+        url = (
+            "https://storage.googleapis.com/model-mgmt-snapshots/datasets_imdb/imdb.zip"
+        )
         direc = os.getcwd()
-        zip_dir = os.path.join(direc, 'vectors.zip')
-
-        temp_dir = tempfile.TemporaryDirectory()
-        temp_dir_ann = tempfile.TemporaryDirectory()
+        zip_dir = os.path.join(direc, 'imdb.zip')
 
         response = requests.get(url, timeout=100)
         if response.status_code == 200:
@@ -114,9 +113,6 @@ class DatasetHF(dl.BaseServiceRunner):
 
         config = dataset.metadata['system'].get('importConfig', dict())
         id_to_label_map = config.get('id_to_label_map', {"0": "neg", "1": "pos"})
-
-        hf_location = source.replace('https://huggingface.co/datasets/', '')
-        datasets_hug = load_dataset(hf_location, split="train")
 
         if progress is not None:
             progress.update(
@@ -153,55 +149,11 @@ class DatasetHF(dl.BaseServiceRunner):
         with open(vectors_file, 'r') as f:
             vectors = json.load(f)
 
-        items_to_skip = {
-            7235,
-            14141,
-            14142,
-            4003,
-            16696,
-        }  # this items doesn't have features
-        used_vectors = {}
-        counter_positive = 0
-        counter_negative = 0
-        for i_item, item in enumerate(datasets_hug):
-            if i_item in items_to_skip:
-                continue
-            text = item['text']
-            file_name = f'{i_item:05}.txt'
-            label = item['label']
-            if label == 1:
-                counter_positive += 1
-                if counter_positive > 250:
-                    continue
-            else:
-                counter_negative += 1
-                if counter_negative > 250:
-                    continue
-
-            with open(os.path.join(temp_dir.name, file_name), "w") as file:
-                file.write(text)
-
-            annotations = dl.AnnotationCollection()
-
-            annotations.add(
-                annotation_definition=dl.Classification(
-                    label=id_to_label_map[str(label)]
-                )
-            )
-
-            ann_json = annotations.to_json()
-
-            with open(os.path.join(temp_dir_ann.name, f'{i_item:05}.json'), 'w') as f:
-                json.dump(ann_json, f)
-            key = f'/{i_item:05}.txt'
-            used_vectors[key] = vectors[key]
-
-            if counter_positive >= 250 and counter_negative >= 250:
-                break
-
+        annotations_files = os.path.join(direc, 'annotations/')
+        items_files = os.path.join(direc, 'items/')
         dataset.items.upload(
-            local_path=temp_dir.name + "/",
-            local_annotations_path=temp_dir_ann.name + "/",
+            local_path=items_files,
+            local_annotations_path=annotations_files,
         )
 
         # Setup dataset recipe and ontology
@@ -214,7 +166,7 @@ class DatasetHF(dl.BaseServiceRunner):
         with ThreadPoolExecutor(max_workers=32) as executor:
             vector_features = [
                 executor.submit(self.create_feature, key, value, dataset, feature_set)
-                for key, value in used_vectors.items()
+                for key, value in vectors.items()
             ]
 
             self.upload_progress(
