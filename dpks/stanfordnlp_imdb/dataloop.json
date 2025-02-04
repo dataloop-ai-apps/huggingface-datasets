@@ -3,11 +3,11 @@
   "name": "hf-imdb-dataset",
   "description": "IMDB dataset from Hugging Face with 500 text labeled with pos or neg",
   "scope": "public",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "codebase": {
     "type": "git",
     "gitUrl": "https://github.com/dataloop-ai-apps/datasets-huggingface.git",
-    "gitTag": "0.0.11"
+    "gitTag": "0.0.12"
   },
   "attributes": {
     "Provider": "Hugging Face",
