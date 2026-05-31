@@ -9,7 +9,7 @@ from functools import partial
 import dtlpy as dl
 import requests
 from datasets import load_dataset
-from dtlpyconverters.uploaders import ConvertersUploader
+from dtlpyconverters.coco import CocoToDataloop
 
 logger = logging.getLogger(name='dataset-huggingFace')
 
@@ -22,12 +22,11 @@ class DatasetHF(dl.BaseServiceRunner):
 
     def __init__(self):
         """
-        Initializes the DatasetHF class by setting up the logger, converter,
+        Initializes the DatasetHF class by setting up the logger,
         COCO format template, and loading the dataset from HuggingFace.
         """
         self.logger = logger
         self.logger.info('Initializing HuggingFace dataset loader')
-        self.converter = ConvertersUploader()
         self.coco_format = {
             "images": [],
             "annotations": [],
@@ -267,15 +266,15 @@ class DatasetHF(dl.BaseServiceRunner):
             json.dump(self.coco_format, f)
         self.logger.info('Images and annotations saved temporarily')
 
-        loop = self.converter._get_event_loop()
-        loop.run_until_complete(
-            self.converter.coco_to_dataloop(
-                dataset=dataset,
-                input_items_path=temp_dir.name,
-                input_annotations_path=temp_dir_ann.name,
-                coco_json_filename='coco_format.json',
-                annotation_options=[dl.AnnotationType.BOX],
-            )
+        converter = CocoToDataloop(
+            dataset=dataset,
+            input_items_path=temp_dir.name,
+            input_annotations_path=temp_dir_ann.name,
+            upload_items=True,
+        )
+        converter.convert(
+            coco_json_filename='coco_format.json',
+            annotation_options=[dl.AnnotationType.BOX],
         )
         self.logger.info('Dataset uploaded successfully')
 
